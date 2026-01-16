@@ -75,7 +75,6 @@ Nix-based development sandbox library. Exposes `dev-sandbox.lib.mkSandbox` for c
 
 ```bash
 nix develop              # Enter devShell with all tools
-nix build                # Build the flake
 nix flake check          # Run all checks (linter, tests)
 cd tests/integration && bats *.bats   # Run integration tests manually
 statix check             # Run Nix linter

@@ -23,14 +23,14 @@ setup() {
   TEST_PROJECT_DIR="${TEST_TMPDIR}/test-project"
   mkdir -p "${TEST_PROJECT_DIR}"
 
-  # Create a minimal flake.nix for the test project
-  cat > "${TEST_PROJECT_DIR}/flake.nix" << 'EOF'
+  # Create a minimal flake.nix for test project
+  cat > "${TEST_PROJECT_DIR}/flake.nix" <<'ENDOFFILE'
 {
   description = "Test project for dev-sandbox";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    dev-sandbox.url = "path:../..";
+    dev-sandbox.url = "path:./dev-sandbox";
   };
 
   outputs = { self, nixpkgs, dev-sandbox }: {
@@ -41,7 +41,7 @@ setup() {
     };
   };
 }
-EOF
+ENDOFFILE
 }
 
 teardown_test_env() {
@@ -56,10 +56,10 @@ teardown() {
 
 @test "PostgreSQL initializes on first shell startup" {
   # Start the dev shell (this will initialize PostgreSQL)
-  run nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
     source /etc/set-environment 2>/dev/null || true
     echo "$SANDBOX_INSTANCE_ID"
-  '
+SCRIPT
 
   # Shell should start successfully
   [ "$status" -eq 0 ]
@@ -79,7 +79,7 @@ teardown() {
 
 @test "db_start boots PostgreSQL successfully" {
   # Start the dev shell and run db_start
-  run nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
     source /etc/set-environment 2>/dev/null || true
 
     echo "Starting PostgreSQL..."
@@ -93,7 +93,7 @@ teardown() {
       echo "PostgreSQL failed to start"
       exit 1
     fi
-  '
+SCRIPT
 
   # Should start successfully
   [ "$status" -eq 0 ]
@@ -101,7 +101,7 @@ teardown() {
 }
 
 @test "pg_isready succeeds after db_start" {
-  run nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
     source /etc/set-environment 2>/dev/null || true
 
     # Start PostgreSQL
@@ -109,13 +109,13 @@ teardown() {
 
     # Wait for PostgreSQL to be ready using pg_isready
     pg_isready -h "$PGHOST" -p "$PGPORT" -t 10
-  '
+SCRIPT
 
   [ "$status" -eq 0 ]
 }
 
 @test "db_stop stops PostgreSQL successfully" {
-  run nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
     source /etc/set-environment 2>/dev/null || true
 
     # Start PostgreSQL
@@ -132,13 +132,13 @@ teardown() {
       echo "PostgreSQL is stopped"
       exit 0
     fi
-  '
+SCRIPT
 
   [ "$status" -eq 0 ]
 }
 
 @test "PostgreSQL can be restarted after stop" {
-  run nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
     source /etc/set-environment 2>/dev/null || true
 
     # Start PostgreSQL
@@ -153,14 +153,14 @@ teardown() {
     pg_isready -h "$PGHOST" -p "$PGPORT" -t 10
 
     echo "PostgreSQL restarted successfully"
-  '
+SCRIPT
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"PostgreSQL restarted successfully"* ]]
 }
 
 @test "PostgreSQL environment variables are set correctly" {
-  run nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
     source /etc/set-environment 2>/dev/null || true
 
     echo "PGPORT=$PGPORT"
@@ -169,7 +169,7 @@ teardown() {
     echo "PGPASSWORD=$PGPASSWORD"
     echo "PGDATA=$PGDATA"
     echo "PGDATABASE=$PGDATABASE"
-  '
+SCRIPT
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"PGPORT="* ]]
@@ -181,7 +181,7 @@ teardown() {
 }
 
 @test "sandbox-up is an alias for db_start" {
-  run nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
     source /etc/set-environment 2>/dev/null || true
 
     # Use sandbox-up
@@ -189,13 +189,13 @@ teardown() {
 
     # Verify PostgreSQL is running
     pg_isready -h "$PGHOST" -p "$PGPORT" -t 10
-  '
+SCRIPT
 
   [ "$status" -eq 0 ]
 }
 
 @test "sandbox-down is an alias for db_stop" {
-  run nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
     source /etc/set-environment 2>/dev/null || true
 
     # Start with sandbox-up
@@ -210,7 +210,7 @@ teardown() {
     else
       exit 0
     fi
-  '
+SCRIPT
 
   [ "$status" -eq 0 ]
 }

@@ -34,7 +34,7 @@ setup() {
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    dev-sandbox.url = "path:../..";
+    dev-sandbox.url = "path:./dev-sandbox";
   };
 
   outputs = { self, nixpkgs, dev-sandbox }: {
@@ -54,12 +54,12 @@ teardown() {
 
 @test "Multiple instances get unique IDs" {
   # Start two instances
-  INSTANCE_1=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  INSTANCE_1=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$SANDBOX_INSTANCE_ID"
   ')
 
-  INSTANCE_2=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  INSTANCE_2=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$SANDBOX_INSTANCE_ID"
   ')
@@ -68,12 +68,12 @@ teardown() {
 }
 
 @test "Multiple instances have different sandbox directories" {
-  INSTANCE_1_DIR=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  INSTANCE_1_DIR=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$SANDBOX_DIR"
   ')
 
-  INSTANCE_2_DIR=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  INSTANCE_2_DIR=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$SANDBOX_DIR"
   ')
@@ -82,12 +82,12 @@ teardown() {
 }
 
 @test "Multiple instances get different ports" {
-  PORT_1=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  PORT_1=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$SANDBOX_PORT"
   ')
 
-  PORT_2=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  PORT_2=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$SANDBOX_PORT"
   ')
@@ -96,12 +96,12 @@ teardown() {
 }
 
 @test "Multiple instances do not share data directories" {
-  DATA_DIR_1=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  DATA_DIR_1=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$PGDATA"
   ')
 
-  DATA_DIR_2=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  DATA_DIR_2=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$PGDATA"
   ')
@@ -109,13 +109,13 @@ teardown() {
   [ "$DATA_DIR_1" != "$DATA_DIR_2" ]
 
   # Initialize first instance
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     db_start
   '
 
   # Second instance should have fresh data (no PG_VERSION yet)
-  RUN=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  RUN=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     if [ -f "$PGDATA/PG_VERSION" ]; then
       echo "already_exists"
@@ -129,14 +129,14 @@ teardown() {
 
 @test "Multiple instances can run simultaneously" {
   # Start first instance
-  PORT_1=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  PORT_1=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     db_start
     echo "$PGPORT"
   ')
 
   # Start second instance (in background to allow parallel execution)
-  PORT_2=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  PORT_2=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     db_start
     echo "$PGPORT"
@@ -145,24 +145,24 @@ teardown() {
   [ "$PORT_1" != "$PORT_2" ]
 
   # Both should be running
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     pg_isready -p "'"$PORT_1"'" -t 5
   '
 
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     pg_isready -p "'"$PORT_2"'" -t 5
   '
 }
 
 @test "Instances have unique socket directories" {
-  SOCKET_1=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  SOCKET_1=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$PGHOST"
   ')
 
-  SOCKET_2=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  SOCKET_2=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$PGHOST"
   ')
@@ -171,17 +171,17 @@ teardown() {
 }
 
 @test "sandbox-list shows all instances" {
-  INSTANCE_1=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  INSTANCE_1=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$SANDBOX_INSTANCE_ID"
   ')
 
-  INSTANCE_2=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  INSTANCE_2=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$SANDBOX_INSTANCE_ID"
   ')
 
-  OUTPUT=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  OUTPUT=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     sandbox-list
   ')
@@ -192,7 +192,7 @@ teardown() {
 
 @test "Ports stay in the 10000-10500 range" {
   for i in {1..10}; do
-    PORT=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+    PORT=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
       source /etc/set-environment 2>/dev/null || true
       echo "$SANDBOX_PORT"
     ')

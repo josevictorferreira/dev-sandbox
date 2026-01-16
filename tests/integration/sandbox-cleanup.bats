@@ -34,7 +34,7 @@ setup() {
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    dev-sandbox.url = "path:../..";
+    dev-sandbox.url = "path:./dev-sandbox";
   };
 
   outputs = { self, nixpkgs, dev-sandbox }: {
@@ -53,7 +53,7 @@ teardown() {
 }
 
 @test "sandbox-list shows no sandboxes initially" {
-  OUTPUT=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  OUTPUT=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     sandbox-list
   ')
@@ -62,12 +62,12 @@ teardown() {
 }
 
 @test "sandbox-list shows created instances" {
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$SANDBOX_INSTANCE_ID"
   '
 
-  OUTPUT=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  OUTPUT=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     sandbox-list
   ')
@@ -78,31 +78,31 @@ teardown() {
 
 @test "sandbox-cleanup removes all sandboxes" {
   # Create two instances
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     db_start
   '
 
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     echo "$SANDBOX_INSTANCE_ID"
   '
 
   # Verify sandboxes exist
-  OUTPUT=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  OUTPUT=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     sandbox-list
   ')
   [[ "$OUTPUT" != *"No sandboxes found"* ]]
 
   # Run cleanup
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     sandbox-cleanup
   '
 
   # Verify sandboxes are removed
-  OUTPUT=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  OUTPUT=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     sandbox-list
   ')
@@ -111,7 +111,7 @@ teardown() {
 
 @test "sandbox-cleanup stops running PostgreSQL instances" {
   # Start an instance
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     db_start
 
@@ -120,7 +120,7 @@ teardown() {
   '
 
   # Run cleanup
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     sandbox-cleanup
   '
@@ -133,13 +133,13 @@ teardown() {
 
 @test "sandbox-cleanup removes data directories" {
   # Create an instance
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     db_start
   '
 
   # Verify data directory exists
-  RUN=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  RUN=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     if [ -d "${TEST_PROJECT_DIR}/.sandboxes" ]; then
       find "${TEST_PROJECT_DIR}/.sandboxes" -name "PG_VERSION" | wc -l
@@ -150,13 +150,13 @@ teardown() {
   [ "$RUN" -gt 0 ]
 
   # Run cleanup
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     sandbox-cleanup
   '
 
   # Verify no data directories remain
-  RUN=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  RUN=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     if [ -d "${TEST_PROJECT_DIR}/.sandboxes" ]; then
       find "${TEST_PROJECT_DIR}/.sandboxes" -name "PG_VERSION" 2>/dev/null | wc -l
@@ -169,12 +169,12 @@ teardown() {
 
 @test "sandbox-cleanup reports number of removed sandboxes" {
   # Create three instances
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c 'source /etc/set-environment 2>/dev/null || true; echo "$SANDBOX_INSTANCE_ID"'
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c 'source /etc/set-environment 2>/dev/null || true; echo "$SANDBOX_INSTANCE_ID"'
-  nix develop "${TEST_PROJECT_DIR}" --command bash -c 'source /etc/set-environment 2>/dev/null || true; echo "$SANDBOX_INSTANCE_ID"'
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c 'source /etc/set-environment 2>/dev/null || true; echo "$SANDBOX_INSTANCE_ID"'
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c 'source /etc/set-environment 2>/dev/null || true; echo "$SANDBOX_INSTANCE_ID"'
+  nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c 'source /etc/set-environment 2>/dev/null || true; echo "$SANDBOX_INSTANCE_ID"'
 
   # Run cleanup and capture output
-  OUTPUT=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  OUTPUT=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     sandbox-cleanup
   ')
@@ -188,7 +188,7 @@ teardown() {
   mkdir -p "${TEST_PROJECT_DIR}/.sandboxes"
 
   # Run cleanup
-  OUTPUT=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  OUTPUT=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     sandbox-cleanup
   ')
@@ -202,7 +202,7 @@ teardown() {
   rm -rf "${TEST_PROJECT_DIR}/.sandboxes" || true
 
   # Run cleanup
-  OUTPUT=$(nix develop "${TEST_PROJECT_DIR}" --command bash -c '
+  OUTPUT=$(nix develop --impure "${TEST_PROJECT_DIR}" --command bash -c '
     source /etc/set-environment 2>/dev/null || true
     sandbox-cleanup
   ')
