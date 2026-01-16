@@ -53,7 +53,7 @@ lib.runTests {
 
   test-sandbox-dir-path = {
     expr = instanceId.deriveSandboxDir ./test-project "abc123";
-    expected = ./test-project + "/.sandboxes/abc123";
+    expected = toString ./test-project + "/.sandboxes/abc123";
   };
 
   test-service-paths = {

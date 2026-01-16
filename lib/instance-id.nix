@@ -3,6 +3,16 @@
 { lib }:
 
 rec {
+  # Convert a string to a list of single-character strings
+  stringToChars = s:
+    let
+      len = builtins.stringLength s;
+      loop = i:
+        if i >= len
+        then [ ]
+        else [ (builtins.substring i 1 s) ] ++ (loop (i + 1));
+    in
+    loop 0;
   # Generate a unique instance ID based on:
   # - Project path (deterministic)
   # - Shell timestamp (for parallel shells)
@@ -45,7 +55,7 @@ rec {
     let
       isValidLength = builtins.stringLength id == 20;
       # Check if all characters are hex digits
-      isHex = lib.all (c: lib.any (c'': c == c'') [ "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "a" "b" "c" "d" "e" "f" ]) (lib.stringToChars id);
+      isHex = lib.all (c: lib.any (c'': c == c'') [ "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "a" "b" "c" "d" "e" "f" ]) (stringToChars id);
     in
     isValidLength && isHex;
 

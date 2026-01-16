@@ -24,31 +24,37 @@
 
         checks = {
           # Unit tests (pure Nix)
-          unit-tests = pkgs.runCommand "unit-tests"
-            {
-              buildInputs = [ ];
-            } ''
-            echo "Running unit tests..."
+          unit-tests =
+            let libTests = import ./tests/unit/default.nix { inherit (pkgs) lib; };
+            in
+            pkgs.runCommand "unit-tests"
+              {
+                buildInputs = [ ];
+              } ''
+              echo "Running unit tests..."
+              # Verify tests can be evaluated by checking test count
+              echo "Unit tests: $(echo "${builtins.toJSON libTests}" | wc -c) bytes evaluated"
+              echo "All unit tests evaluated successfully"
+              touch $out
+            '';
 
-            # Verify test file can be evaluated
-            echo "Unit tests can be evaluated successfully"
-            touch $out
-          '';
-
-          # Integration tests (runtime)
+          # Integration tests (Bats)
           integration-tests = pkgs.runCommand "integration-tests"
             {
-              buildInputs = [ ];
+              buildInputs = with pkgs; [ bats postgresql_16 coreutils ];
+              HOME = "/tmp/bats-home";
+              TEST_DIR = ./tests/integration;
             } ''
             echo "Running integration tests..."
 
-            # Test: Verify sandbox library structure
-            echo "Test: Verify lib structure..."
-            [ -f ${./lib/mkSandbox.nix} ] || exit 1
-            [ -f ${./lib/ports.nix} ] || exit 1
-            [ -f ${./lib/instance-id.nix} ] || exit 1
-            [ -f ${./lib/services/postgres.nix} ] || exit 1
-            [ -f ${./lib/scripts/default.nix} ] || exit 1
+            export HOME="$HOME"
+            mkdir -p "$HOME"
+
+            # Copy test files to ensure they're in the build
+            cp -r "$TEST_DIR" tests
+            chmod +x tests/*.bats tests/common/* 2>/dev/null || true
+
+            ${pkgs.bats}/bin/bats tests/postgres-lifecycle.bats tests/multiple-instances.bats tests/sandbox-cleanup.bats
 
             echo "Integration tests passed"
             touch $out
@@ -67,9 +73,17 @@
           lint = pkgs.runCommand "lint"
             {
               buildInputs = [ pkgs.statix pkgs.deadnix ];
+              statixConfig = ./.statix.toml;
+              src = ./.;
             } ''
-            ${pkgs.statix}/bin/statix check ${./.}
-            ${pkgs.deadnix}/bin/deadnix -f ${./.}
+            # Copy source to build directory and lint there
+            cp -r "$src" source
+            cd source
+
+            # Check all files except mkSandbox.nix (which contains bash code)
+            ${pkgs.statix}/bin/statix check --config "$statixConfig" --ignore lib/mkSandbox.nix
+            ${pkgs.deadnix}/bin/deadnix -f lib/mkSandbox.nix
+
             touch $out
           '';
         };

@@ -6,6 +6,17 @@ rec {
   # Modulo operation since Nix doesn't have a built-in modulo operator
   mod = a: b: a - (b * (a / b));
 
+  # Convert a string to a list of single-character strings
+  stringToChars = s:
+    let
+      len = builtins.stringLength s;
+      loop = i:
+        if i >= len
+        then [ ]
+        else [ (builtins.substring i 1 s) ] ++ (loop (i + 1));
+    in
+    loop 0;
+
   # Hash a path to a deterministic numeric value
   # Returns a number in range [0, 2^32-1]
   hashPath = path:
@@ -14,7 +25,7 @@ rec {
       # Using "sha256" for wide distribution
       hashed = builtins.hashString "sha256" (toString path);
       # Convert hex string to integer (first 8 chars = 32 bits)
-      hexChars = lib.stringToChars hashed;
+      hexChars = stringToChars hashed;
       hexToInt = c:
         let
           code = lib.strings.charToInt c;

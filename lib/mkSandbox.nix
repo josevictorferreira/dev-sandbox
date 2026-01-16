@@ -27,9 +27,11 @@ let
     SANDBOX_DIR="${projectRoot}/.sandboxes/$INSTANCE_ID"
     export SANDBOX_DIR
 
-    # Derive port
-    BASE_HASH=$(echo "${pkgs.path}" | ${pkgs.coreutils}/bin/md5sum | ${pkgs.coreutils}/bin/cut -c1-4 | ${pkgs.coreutils}/bin/tr -d ' ')
-    INSTANCE_OFFSET=$((INSTANCE_ID * 2 % 500))
+    # Derive port: hash project root to get project-specific base port
+    BASE_HASH=$(echo "${projectRoot}" | ${pkgs.coreutils}/bin/md5sum | ${pkgs.coreutils}/bin/cut -c1-4 | ${pkgs.coreutils}/bin/tr -d ' ')
+    # Convert first 8 hex chars to number for arithmetic
+    INSTANCE_NUM=$((16#${INSTANCE_ID:0:8}))
+    INSTANCE_OFFSET=$((INSTANCE_NUM * 2 % 500))
     PORT=$((10000 + BASE_HASH % 500 + INSTANCE_OFFSET))
     export SANDBOX_PORT="$PORT"
 
@@ -276,6 +278,7 @@ let
       sandboxStatus
       sandboxList
       sandboxCleanup
+      pkgs.process-compose # Optional: for future process-compose integration
     ];
 
     shellHook = sandboxShellHook;

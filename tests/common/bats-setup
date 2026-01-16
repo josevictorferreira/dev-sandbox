@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Common setup for Bats tests
+
+setup_test_env() {
+  TEST_TMPDIR=$(mktemp -d -t dev-sandbox-test-XXXXXX)
+  export TEST_TMPDIR
+
+  export HOME="${TEST_TMPDIR}/home"
+  mkdir -p "$HOME"
+
+  export XDG_CACHE_HOME="${TEST_TMPDIR}/cache"
+  export XDG_CONFIG_HOME="${TEST_TMPDIR}/config"
+  export XDG_DATA_HOME="${TEST_TMPDIR}/data"
+  mkdir -p "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+
+  export NIX_LOG_COLOR=0
+}
+
+teardown_test_env() {
+  pkill -f "postgres.*${TEST_TMPDIR}" || true
+  sleep 1
+  rm -rf "${TEST_TMPDIR}"
+}
+
+trap 'teardown_test_env' EXIT

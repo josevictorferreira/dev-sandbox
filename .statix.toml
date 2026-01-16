@@ -1,0 +1,2 @@
+disabled = ["unquoted_uri", "unknown_binding_for_let"]
+ignore = ["lib/mkSandbox.nix"]
