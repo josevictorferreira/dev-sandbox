@@ -14,6 +14,15 @@ setup_test_env() {
   mkdir -p "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
 
   export NIX_LOG_COLOR=0
+
+  # Set project root path for use in tests
+  if [ -d "./dev-sandbox" ]; then
+    # Running in nix build sandbox (dev-sandbox copied to ./dev-sandbox)
+    export DEV_SANDBOX_ROOT="${PWD}/dev-sandbox"
+  else
+    # Running locally (use PWD from bats invocation)
+    export DEV_SANDBOX_ROOT="${PWD}/../.."
+  fi
 }
 
 setup() {
@@ -24,18 +33,17 @@ setup() {
   mkdir -p "${TEST_PROJECT_DIR}"
 
   # Create a minimal flake.nix for test project
-  cat > "${TEST_PROJECT_DIR}/flake.nix" <<'ENDOFFILE'
+  cat > "${TEST_PROJECT_DIR}/flake.nix" <<ENDOFFILE
 {
   description = "Test project for dev-sandbox";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    dev-sandbox.url = "path:./dev-sandbox";
+    dev-sandbox.url = "path:$DEV_SANDBOX_ROOT";
   };
 
   outputs = { self, nixpkgs, dev-sandbox }: {
-    devShells.x86_64-linux.default = dev-sandbox.lib.x86_64-linux.mkSandbox {
-      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+    devShells.x86_64-linux.default = (dev-sandbox.lib { system = "x86_64-linux"; }).mkSandbox {
       projectRoot = ./.;
       services.postgres = true;
     };

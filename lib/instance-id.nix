@@ -28,12 +28,12 @@ rec {
   # Returns: Shell script that prints the instance ID to stdout
   generateInstanceIdScript = pkgs: ''
     # Generate a unique instance ID
-    # Combines: project hash (8 chars) + timestamp (8 chars) + random (4 chars)
+    # Combines: project hash (8 chars) + timestamp hex (8 chars) + random hex (4 chars)
     PROJECT_HASH=$(echo "${pkgs.path}" | ${pkgs.coreutils}/bin/md5sum | ${pkgs.coreutils}/bin/cut -c1-8)
-    TIMESTAMP=$(${pkgs.coreutils}/bin/date +%s | ${pkgs.coreutils}/bin/tail -c 8)
+    TIMESTAMP_HEX=$(printf '%08x' $(${pkgs.coreutils}/bin/date +%s))
     RANDOM_PART=$(${pkgs.coreutils}/bin/od -An -N2 -tx2 /dev/urandom | ${pkgs.coreutils}/bin/tr -d ' ')
 
-    echo "''${PROJECT_HASH}''${TIMESTAMP}''${RANDOM_PART}"
+    echo "''${PROJECT_HASH}''${TIMESTAMP_HEX}''${RANDOM_PART}"
   '';
 
   # Generate a unique instance ID as a pure Nix expression

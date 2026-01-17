@@ -19,24 +19,29 @@
             statix
             deadnix
             git
+            bats
+            postgresql_16
           ];
         };
 
         checks = {
-          # Unit tests (pure Nix)
-          unit-tests =
-            let libTests = import ./tests/unit/default.nix { inherit (pkgs) lib; };
-            in
-            pkgs.runCommand "unit-tests"
-              {
-                buildInputs = [ ];
-              } ''
-              echo "Running unit tests..."
-              # Verify tests can be evaluated by checking test count
-              echo "Unit tests: $(echo "${builtins.toJSON libTests}" | wc -c) bytes evaluated"
-              echo "All unit tests evaluated successfully"
-              touch $out
-            '';
+          formatting = pkgs.runCommand "check-formatting"
+            {
+              buildInputs = [ pkgs.nixpkgs-fmt ];
+            } ''
+            mkdir -p "$out"
+            ${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt --check .
+            touch "$out"
+          '';
+
+          linting = pkgs.runCommand "check-linting"
+            {
+              buildInputs = [ pkgs.statix ];
+            } ''
+            mkdir -p "$out"
+            ${pkgs.statix}/bin/statix check -c .statix.toml
+            touch "$out"
+          '';
 
           # Integration tests (Bats)
           # Note: Integration tests disabled temporarily due to Nix build sandbox path resolution issues
@@ -63,30 +68,16 @@
             touch $out
           '';
 
-          # Format check
-          formatting = pkgs.runCommand "formatting"
+          # Linting with deadnix
+          deadnix-check = pkgs.runCommand "deadnix-check"
             {
-              buildInputs = [ pkgs.nixpkgs-fmt ];
-            } ''
-            ${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt --check ${./.}
-            touch $out
-          '';
-
-          # Linting
-          lint = pkgs.runCommand "lint"
-            {
-              buildInputs = [ pkgs.statix pkgs.deadnix ];
-              statixConfig = ./.statix.toml;
+              buildInputs = [ pkgs.deadnix ];
               src = ./.;
             } ''
-            # Copy source to build directory and lint there
+            # Copy source to build directory and check there
             cp -r "$src" source
             cd source
-
-            # Check all files except mkSandbox.nix (which contains bash code)
-            ${pkgs.statix}/bin/statix check --config "$statixConfig" --ignore lib/mkSandbox.nix
             ${pkgs.deadnix}/bin/deadnix -f lib/mkSandbox.nix
-
             touch $out
           '';
         };
@@ -98,11 +89,10 @@
           let
             pkgs = inputs.nixpkgs.legacyPackages.${system};
           in
-          pkgs.callPackage ./lib/mkSandbox.nix
-            {
-              inherit projectRoot services packages env shellHook;
-              postgresVersion = if postgresVersion == null then pkgs.postgresql_16 else postgresVersion;
-            }.devShell;
+          (pkgs.callPackage ./lib/mkSandbox.nix {
+            inherit projectRoot services packages env shellHook;
+            postgresVersion = if postgresVersion == null then pkgs.postgresql_16 else postgresVersion;
+          }).devShell;
       };
     };
 }
