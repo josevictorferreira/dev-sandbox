@@ -12,40 +12,89 @@ A stack-agnostic, instance-isolated development environment system. Think "docke
 - **Nix-Native**: No Docker, no VMs, just pure Nix
 - **Zero Global State**: Everything lives under `.sandboxes/<instance-id>/`
 
-## How It Works
+## 🚀 Getting Started
 
-1. **Instance ID**: Generated at shell startup from project path + timestamp + random
-2. **Port Allocation**: Hash project → base port 10000-10500 → offset by instance ID
-3. **State Directory**: All service data under `.sandboxes/<instance-id>/`
-4. **Service Management**: Helper commands (`db_start`, `db_stop`, etc.) manage services
-5. **Cleanup**: Automatic or manual cleanup removes stale instances
+Follow these steps to add `dev-sandbox` to your project.
 
-## Installation
+### 1. Add to `flake.nix`
 
-Add dev-sandbox to your project's `flake.nix`:
+Add the input and configure your `devShell` using `mkSandbox`.
 
 ```nix
 {
+  description = "My Project";
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    
+    # Add dev-sandbox input
     dev-sandbox.url = "github:your-org/dev-sandbox";
     dev-sandbox.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = { self, nixpkgs, dev-sandbox, ... }:
     let
-      system = "x86_64-linux";
+      system = "x86_64-linux"; # Adjust for your system (e.g., aarch64-darwin)
+      pkgs = nixpkgs.legacyPackages.${system};
     in
     {
       devShells.${system}.default = dev-sandbox.lib.${system}.mkSandbox {
         projectRoot = ./.;
-        # ...configuration
+        
+        # Enable services
+        services = { 
+          postgres = true; 
+        };
+        
+        # Add project packages
+        packages = with pkgs; [ 
+          nodejs_20
+          yarn
+          postgresql_16 # Client tools
+        ];
+        
+        # Set environment variables
+        env = { 
+          NODE_ENV = "development";
+          # DB vars like PGPORT are auto-injected
+        };
+        
+        # Optional: Run setup commands
+        shellHook = ''
+          echo "🚀 Dev environment ready!"
+          echo "DB running on port $PGPORT"
+        '';
       };
     };
 }
 ```
 
-## Usage
+### 2. Enter the Sandbox
+
+```bash
+nix develop
+```
+
+This will:
+1. Generate a unique instance ID
+2. Allocate isolated ports (avoiding conflicts)
+3. Create a private data directory in `.sandboxes/<id>`
+4. Set environment variables (`PGPORT`, `PGDATA`, etc.)
+
+### 3. Control Services
+
+Manage your isolated services with built-in commands:
+
+```bash
+sandbox-up      # Start all services (Postgres, etc.)
+sandbox-down    # Stop all services
+sandbox-status  # Check status and ports
+sandbox-cleanup # Remove stale sandboxes
+```
+
+---
+
+## Usage Examples
 
 ### Minimal Example
 
@@ -88,53 +137,29 @@ devShells.default = dev-sandbox.lib.${system}.mkSandbox {
 };
 ```
 
-### Generic Application
+## How It Works
 
-```nix
-devShells.default = dev-sandbox.lib.${system}.mkSandbox {
-  projectRoot = ./.;
-  services = { postgres = true; };
-  packages = with pkgs; [ go gopls ];
-  env = {
-    DB_HOST = "localhost";
-    DB_PORT = "$PGPORT";
-  };
-  shellHook = ''
-    echo "Starting Go dev environment..."
-  '';
-};
-```
+1. **Instance ID**: Generated at shell startup from project path + timestamp + random
+2. **Port Allocation**: Hash project → base port 10000-10500 → offset by instance ID
+3. **State Directory**: All service data under `.sandboxes/<instance-id>/`
+4. **Isolation**: Multiple shells can run side-by-side without port conflicts
 
-## API
+## API Reference
 
-### `lib.mkSandbox :: { ... } -> devShell`
-
-Creates an isolated development environment.
-
-#### Parameters
+### `lib.mkSandbox`
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `projectRoot` | `path` | **Required** | Project root directory (use `./.`) |
-| `services` | `attrs` | `{ postgres = true; }` | Services to enable (currently `postgres`) |
+| `services` | `attrs` | `{ postgres = true; }` | Services to enable |
 | `packages` | `list` | `[ ]` | Additional packages to install |
 | `env` | `attrs` | `{ }` | Environment variables to set |
 | `shellHook` | `string` | `""` | Shell hook to run after setup |
 | `postgresVersion` | `package` | `pkgs.postgresql_16` | PostgreSQL package to use |
 
-#### Available Commands
+### Environment Variables
 
-- `db_start`: Start PostgreSQL service
-- `db_stop`: Stop PostgreSQL service
-- `sandbox-up`: Start all services (alias for `db_start`)
-- `sandbox-down`: Stop all services (alias for `db_stop`)
-- `sandbox-status`: Show sandbox status and running services
-- `sandbox-list`: List all sandbox instances
-- `sandbox-cleanup`: Clean up stale sandboxes
-
-#### Environment Variables
-
-When PostgreSQL is enabled, these are automatically set:
+Automatically injected when services are enabled:
 
 - `SANDBOX_INSTANCE_ID`: Unique instance identifier
 - `SANDBOX_DIR`: Sandbox state directory
@@ -144,63 +169,6 @@ When PostgreSQL is enabled, these are automatically set:
 - `PGUSER`: PostgreSQL user (postgres)
 - `PGPASSWORD`: PostgreSQL password (postgres)
 - `PGDATA`: PostgreSQL data directory
-- `PGDATABASE`: Default database (postgres)
-
-## Isolation Model
-
-Each sandbox instance has:
-- Unique instance ID (20 hex chars)
-- Separate PostgreSQL data directory
-- Separate Unix socket directory
-- Separate log directory
-- Unique port (10000-10500 range)
-
-Multiple developers can run parallel shells without conflicts.
-
-```
-myproject/
-└─ .sandboxes/
-   ├─ a1b2c3d4e5f6g7h8i9j0/  # Instance 1
-   │  ├─ postgres/
-   │  │  ├─ data/
-   │  │  ├─ socket/
-   │  │  └─ log/
-   │  └─ process-compose.yaml
-   └─ k9l8m7n6o5p4q3r2s1t0/  # Instance 2
-      └─ postgres/
-         ├─ data/
-         ├─ socket/
-         └─ log/
-```
-
-## Port Allocation
-
-Ports are:
-1. Deterministic from project path (hash → base port)
-2. Offset by instance ID (for parallel shells)
-3. Confined to range 10000-10500
-
-Example:
-- Project A: hash 1234 → base port 10123
-- Instance 0: port 10123
-- Instance 1: port 10125 (offset by 2)
-- Instance 2: port 10127
-
-No global port conflicts. No Docker network overhead.
-
-## Testing
-
-Run all tests:
-
-```bash
-nix flake check
-```
-
-### Test Structure
-
-- `tests/unit/`: Pure Nix unit tests (port allocation, instance ID logic)
-- `tests/integration/`: Runtime shell tests (PostgreSQL lifecycle)
-- `tests/fixtures/`: Consumer examples (Rails-like, Django-like)
 
 ## Development
 
@@ -208,47 +176,10 @@ nix flake check
 # Enter development shell
 nix develop
 
-# Format code
-nixpkgs-fmt .
-
-# Lint code
-statix check .
-deadnix -f .
-
 # Run checks
 nix flake check
 ```
 
-## Guarantees
-
-✅ **Isolation**: Concurrent shells never share state
-✅ **Determinism**: Same project → same base port always
-✅ **Cleanup**: Stale sandboxes can be cleaned up safely
-✅ **No Assumptions**: Works with any stack (Rails, Django, Node, Go, etc.)
-✅ **Nix-Native**: No Docker, no VMs, pure Nix
-✅ **Cross-Platform**: Linux and macOS support
-
-## Non-Goals
-
-❌ **Framework-Specific Tools**: Not a Rails/Django/Node manager
-❌ **Migrations**: Does not run database migrations
-❌ **Service Discovery**: Only PostgreSQL (extensible)
-❌ **Cloud Support**: Development environments only
-
 ## License
 
 MIT
-
-## Contributing
-
-Contributions welcome! Please:
-1. Add tests for new features
-2. Follow Nix best practices
-3. Keep it stack-agnostic
-4. Update documentation
-
-## See Also
-
-- [Nix Flakes](https://nixos.wiki/wiki/Flakes)
-- [Nixpkgs](https://github.com/NixOS/nixpkgs)
-- [process-compose](https://github.com/F1bonacc1/process-compose)
