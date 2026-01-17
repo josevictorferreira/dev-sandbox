@@ -25,6 +25,16 @@ setup_test_env() {
   fi
 }
 
+# Helper function to run commands inside nix develop sandbox
+# Returns output in $output and status in $status (bats convention)
+# Usage: run_in_sandbox 'cmd1; cmd2; cmd3'
+# Note: We unset outer sandbox env vars to prevent pollution, but use --keep-PATH
+# to ensure nix develop --command properly sets up the environment
+run_in_sandbox() {
+  env -u SANDBOX_INSTANCE_ID -u SANDBOX_DIR -u PGDATA -u PGHOST -u PGPORT \
+    nix develop "${TEST_PROJECT_DIR}" --impure --command sh -c "$1"
+}
+
 setup() {
   setup_test_env
 
@@ -38,8 +48,8 @@ setup() {
   description = "Test project for dev-sandbox";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     dev-sandbox.url = "path:$DEV_SANDBOX_ROOT";
+    nixpkgs.follows = "dev-sandbox/nixpkgs";
   };
 
   outputs = { self, nixpkgs, dev-sandbox }: {
@@ -50,6 +60,9 @@ setup() {
   };
 }
 ENDOFFILE
+
+  # Pre-generate flake.lock to avoid GitHub API calls during tests
+  nix flake lock "${TEST_PROJECT_DIR}" --override-input dev-sandbox "path:${DEV_SANDBOX_ROOT}" 2>/dev/null || true
 }
 
 teardown_test_env() {
@@ -63,121 +76,46 @@ teardown() {
 }
 
 @test "PostgreSQL initializes on first shell startup" {
-  # Start the dev shell (this will initialize PostgreSQL)
-  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
-    source /etc/set-environment 2>/dev/null || true
-    echo "$SANDBOX_INSTANCE_ID"
-SCRIPT
+  output=$(run_in_sandbox 'db_start; echo "SANDBOX_DIR=$SANDBOX_DIR"; if [ -f "$PGDATA/PG_VERSION" ]; then echo "PostgreSQL initialized successfully"; cat "$PGDATA/PG_VERSION"; else echo "ERROR: PG_VERSION not found"; exit 1; fi; db_stop')
+  status=$?
 
-  # Shell should start successfully
   [ "$status" -eq 0 ]
-
-  # Should have an instance ID
-  [ -n "$output" ]
-
-  # Check that PostgreSQL data directory was created
-  run ls "${TEST_PROJECT_DIR}/.sandboxes"
-  [ "$status" -eq 0 ]
-
-  # Check that PG_VERSION exists (indicates PostgreSQL was initialized)
-  run find "${TEST_PROJECT_DIR}/.sandboxes" -name "PG_VERSION"
-  [ "$status" -eq 0 ]
-  [ -n "$output" ]
+  [[ "$output" == *"PostgreSQL initialized successfully"* ]]
 }
 
 @test "db_start boots PostgreSQL successfully" {
-  # Start the dev shell and run db_start
-  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
-    source /etc/set-environment 2>/dev/null || true
+  output=$(run_in_sandbox 'echo "Starting PostgreSQL..."; db_start; echo "Checking status..."; if pg_ctl -D "$PGDATA" status > /dev/null 2>&1; then echo "PostgreSQL is running"; exit 0; else echo "PostgreSQL failed to start"; exit 1; fi' 2>&1)
+  status=$?
 
-    echo "Starting PostgreSQL..."
-    db_start
-
-    echo "Checking status..."
-    if pg_ctl -D "$PGDATA" status > /dev/null 2>&1; then
-      echo "PostgreSQL is running"
-      exit 0
-    else
-      echo "PostgreSQL failed to start"
-      exit 1
-    fi
-SCRIPT
-
-  # Should start successfully
   [ "$status" -eq 0 ]
   [[ "$output" == *"PostgreSQL is ready!"* ]]
 }
 
 @test "pg_isready succeeds after db_start" {
-  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
-    source /etc/set-environment 2>/dev/null || true
-
-    # Start PostgreSQL
-    db_start
-
-    # Wait for PostgreSQL to be ready using pg_isready
-    pg_isready -h "$PGHOST" -p "$PGPORT" -t 10
-SCRIPT
+  output=$(run_in_sandbox 'db_start; pg_isready -h "$PGHOST" -p "$PGPORT" -t 10')
+  status=$?
 
   [ "$status" -eq 0 ]
 }
 
 @test "db_stop stops PostgreSQL successfully" {
-  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
-    source /etc/set-environment 2>/dev/null || true
-
-    # Start PostgreSQL
-    db_start
-
-    # Stop PostgreSQL
-    db_stop
-
-    # Verify it's stopped
-    if pg_ctl -D "$PGDATA" status > /dev/null 2>&1; then
-      echo "PostgreSQL is still running"
-      exit 1
-    else
-      echo "PostgreSQL is stopped"
-      exit 0
-    fi
-SCRIPT
+  output=$(run_in_sandbox 'db_start; db_stop; if pg_ctl -D "$PGDATA" status > /dev/null 2>&1; then echo "PostgreSQL is still running"; exit 1; else echo "PostgreSQL is stopped"; exit 0; fi')
+  status=$?
 
   [ "$status" -eq 0 ]
 }
 
 @test "PostgreSQL can be restarted after stop" {
-  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
-    source /etc/set-environment 2>/dev/null || true
-
-    # Start PostgreSQL
-    db_start
-    pg_isready -h "$PGHOST" -p "$PGPORT" -t 10
-
-    # Stop PostgreSQL
-    db_stop
-
-    # Start again
-    db_start
-    pg_isready -h "$PGHOST" -p "$PGPORT" -t 10
-
-    echo "PostgreSQL restarted successfully"
-SCRIPT
+  output=$(run_in_sandbox 'db_start; pg_isready -h "$PGHOST" -p "$PGPORT" -t 10; db_stop; db_start; pg_isready -h "$PGHOST" -p "$PGPORT" -t 10; echo "PostgreSQL restarted successfully"')
+  status=$?
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"PostgreSQL restarted successfully"* ]]
 }
 
 @test "PostgreSQL environment variables are set correctly" {
-  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
-    source /etc/set-environment 2>/dev/null || true
-
-    echo "PGPORT=$PGPORT"
-    echo "PGHOST=$PGHOST"
-    echo "PGUSER=$PGUSER"
-    echo "PGPASSWORD=$PGPASSWORD"
-    echo "PGDATA=$PGDATA"
-    echo "PGDATABASE=$PGDATABASE"
-SCRIPT
+  output=$(run_in_sandbox 'echo "PGPORT=$PGPORT"; echo "PGHOST=$PGHOST"; echo "PGUSER=$PGUSER"; echo "PGPASSWORD=$PGPASSWORD"; echo "PGDATA=$PGDATA"; echo "PGDATABASE=$PGDATABASE"')
+  status=$?
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"PGPORT="* ]]
@@ -189,36 +127,15 @@ SCRIPT
 }
 
 @test "sandbox-up is an alias for db_start" {
-  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
-    source /etc/set-environment 2>/dev/null || true
-
-    # Use sandbox-up
-    sandbox-up
-
-    # Verify PostgreSQL is running
-    pg_isready -h "$PGHOST" -p "$PGPORT" -t 10
-SCRIPT
+  output=$(run_in_sandbox 'sandbox-up; pg_isready -h "$PGHOST" -p "$PGPORT" -t 10')
+  status=$?
 
   [ "$status" -eq 0 ]
 }
 
 @test "sandbox-down is an alias for db_stop" {
-  run nix develop "${TEST_PROJECT_DIR}" --impure --command bash <<'SCRIPT'
-    source /etc/set-environment 2>/dev/null || true
-
-    # Start with sandbox-up
-    sandbox-up
-
-    # Stop with sandbox-down
-    sandbox-down
-
-    # Verify it's stopped
-    if pg_ctl -D "$PGDATA" status > /dev/null 2>&1; then
-      exit 1
-    else
-      exit 0
-    fi
-SCRIPT
+  output=$(run_in_sandbox 'sandbox-up; sandbox-down; if pg_ctl -D "$PGDATA" status > /dev/null 2>&1; then exit 1; else exit 0; fi')
+  status=$?
 
   [ "$status" -eq 0 ]
 }

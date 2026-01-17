@@ -121,9 +121,6 @@ let
   dbStart = pkgs.writeShellScriptBin "db_start" ''
     set -eo pipefail
 
-    # Source set-environment in a subshell to avoid unbound variable errors
-    (source /etc/set-environment 2>/dev/null) || true
-
     if [ -z "''${SANDBOX_INSTANCE_ID:-}" ]; then
       echo "Error: Not in a sandbox environment" >&2
       exit 1
@@ -168,9 +165,6 @@ let
 
   dbStop = pkgs.writeShellScriptBin "db_stop" ''
     set -eo pipefail
-
-    # Source set-environment in a subshell to avoid unbound variable errors
-    (source /etc/set-environment 2>/dev/null) || true
 
     if [ -z "''${SANDBOX_INSTANCE_ID:-}" ]; then
       echo "Error: Not in a sandbox environment"
