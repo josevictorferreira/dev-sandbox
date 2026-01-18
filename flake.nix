@@ -85,12 +85,12 @@
 
       # Public library API
       flake.lib = { system, ... }: {
-        mkSandbox = { projectRoot, services ? { postgres = true; }, packages ? [ ], env ? { }, shellHook ? "", postgresVersion ? null }:
+        mkSandbox = { projectRoot, services ? { postgres = true; }, packages ? [ ], env ? { }, shellHook ? "", postgresVersion ? null, tmux ? { enable = false; } }:
           let
             pkgs = inputs.nixpkgs.legacyPackages.${system};
           in
           (pkgs.callPackage ./lib/mkSandbox.nix {
-            inherit projectRoot services packages env shellHook;
+            inherit projectRoot services packages env shellHook tmux;
             postgresVersion = if postgresVersion == null then pkgs.postgresql_16 else postgresVersion;
           }).devShell;
       };

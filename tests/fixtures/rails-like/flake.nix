@@ -35,8 +35,19 @@
           echo ""
           echo "Use 'db_start' to start PostgreSQL"
           echo "Use 'db_stop' to stop PostgreSQL"
+          echo "Use 'sandbox-spawn' to spawn a tmux session"
         '';
         postgresVersion = pkgs.postgresql_15;
+
+        # Tmux configuration for Rails-like projects
+        tmux = {
+          enable = true;
+          panes = [
+            { command = "echo 'Rails console ready'"; }
+            { command = "echo 'Starting server...'; sleep 1"; delay = 1; }
+          ];
+          layout = "main-horizontal";
+        };
       };
     };
 }

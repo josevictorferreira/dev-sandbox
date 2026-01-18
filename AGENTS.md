@@ -4,6 +4,8 @@
 **Branch:** main
 **Language:** Nix
 
+> **Before starting any implementation, read `.docs/rules.md` for project-specific lessons and gotchas.**
+
 ## OVERVIEW
 
 Nix-based development sandbox library. Exposes `dev-sandbox.lib.mkSandbox` for creating isolated dev environments with services (PostgreSQL).

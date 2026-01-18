@@ -8,11 +8,37 @@
 , env ? { }
 , shellHook ? ""
 , postgresVersion ? pkgs.postgresql_16
+, tmux ? { enable = false; }
 }:
 
 let
   # Import sub-modules
   instanceIdModule = import ./instance-id.nix { inherit lib; };
+
+  # Tmux module configuration (only import if enabled)
+  tmuxConfig = {
+    sessionName = tmux.sessionName or null; # null = auto-detect at runtime
+    panes = tmux.panes or [{ command = "$SHELL"; }];
+    layout = tmux.layout or "tiled";
+    subpath = tmux.subpath or "";
+  };
+
+  tmuxModule =
+    if tmux.enable or false
+    then import ./tmux/default.nix { inherit lib pkgs; config = tmuxConfig; }
+    else null;
+
+  # Tmux scripts (only if enabled)
+  tmuxPackages =
+    if tmuxModule != null
+    then [
+      tmuxModule.spawnScript
+      tmuxModule.pickScript
+      tmuxModule.sessionsScript
+      tmuxModule.killScript
+      pkgs.fzf # Required by sandbox-pick and sandbox-kill
+    ]
+    else [ ];
 
   # Generate instance ID at runtime
   instanceIdScript = instanceIdModule.generateInstanceIdScript pkgs;
@@ -296,7 +322,7 @@ let
 
   # Build dev shell
   devShell = pkgs.mkShell {
-    buildInputs = packages ++ [
+    buildInputs = packages ++ tmuxPackages ++ [
       dbStart
       dbStop
       sandboxUp

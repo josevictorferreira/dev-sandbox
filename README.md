@@ -155,6 +155,64 @@ devShells.default = dev-sandbox.lib.${system}.mkSandbox {
 | `env` | `attrs` | `{ }` | Environment variables to set |
 | `shellHook` | `string` | `""` | Shell hook to run after setup |
 | `postgresVersion` | `package` | `pkgs.postgresql_16` | PostgreSQL package to use |
+| `tmux` | `attrs` | `{ enable = false; }` | Tmux session spawner config |
+
+### Tmux Session Spawner
+
+Enable tmux integration to spawn consistent multi-pane sessions for your project:
+
+```nix
+devShells.default = dev-sandbox.lib.${system}.mkSandbox {
+  projectRoot = ./.;
+  services = { postgres = true; };
+  packages = with pkgs; [ nodejs ];
+
+  # Tmux configuration
+  tmux = {
+    enable = true;
+    sessionName = null;  # Auto-detect from git repo or dirname
+    panes = [
+      { command = "nvim ."; }
+      { command = "npm run dev"; delay = 2; }  # Wait 2s before running
+      { command = "$SHELL"; }  # Plain shell
+    ];
+    layout = "main-horizontal";  # "tiled", "main-vertical", "even-horizontal", etc.
+    subpath = "";  # Optional subdirectory to cd into
+  };
+};
+```
+
+#### Tmux Commands
+
+When `tmux.enable = true`, these commands are available in your shell:
+
+| Command | Description |
+|---------|-------------|
+| `sandbox-spawn` | Create new tmux session (auto-increments ID) |
+| `sandbox-spawn 5` | Create session with explicit ID |
+| `sandbox-pick` | fzf picker to switch between sandbox sessions |
+| `sandbox-sessions` | List active sandbox sessions |
+| `sandbox-kill` | Kill a sandbox session (fzf picker if no arg) |
+| `sandbox-kill 3` | Kill session with ID 3 |
+
+#### Tmux Config Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enable` | `bool` | `false` | Enable tmux integration |
+| `sessionName` | `string\|null` | `null` | Session name (null = auto-detect from git) |
+| `panes` | `list` | `[{ command = "$SHELL"; }]` | Pane configurations |
+| `layout` | `string` | `"tiled"` | Tmux layout (tiled, main-horizontal, etc.) |
+| `subpath` | `string` | `""` | Subdirectory to cd into for all panes |
+
+#### Pane Config
+
+Each pane in the `panes` list accepts:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `command` | `string` | `"$SHELL"` | Command to run in the pane |
+| `delay` | `int` | `0` | Seconds to wait before running command |
 
 ### Environment Variables
 
