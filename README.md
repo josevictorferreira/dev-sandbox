@@ -27,8 +27,7 @@ Add the input and configure your `devShell` using `mkSandbox`.
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     
-    # Add dev-sandbox input
-    dev-sandbox.url = "github:your-org/dev-sandbox";
+    dev-sandbox.url = "github:josevictorferreira/dev-sandbox";
     dev-sandbox.inputs.nixpkgs.follows = "nixpkgs";
   };
 
