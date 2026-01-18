@@ -2,11 +2,11 @@
 # tests/integration/tmux.bats - Integration tests for tmux session spawner
 # Phase 1: Core tmux module testing
 
-# Load common test utilities
-load 'common/test_helper'
-
 # Test fixture configuration
 TEST_SESSION_BASE="dev-sandbox-test"
+
+# Get project root (two levels up from tests/integration/)
+PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../.." && pwd)"
 
 setup() {
   # Create temporary test directory
@@ -20,16 +20,16 @@ setup() {
   git config user.email "test@example.com"
   git config user.name "Test"
 
-  # Clean any existing test sessions
+  # Clean any existing test sessions to avoid conflicts
   tmux list-sessions -F '#{session_name}' 2>/dev/null | \
-    grep -E "^${TEST_SESSION_BASE} #" | \
+    grep -E "^(${TEST_SESSION_BASE}|test-project) #|^unrelated-session$" | \
     xargs -I {} tmux kill-session -t "{}" 2>/dev/null || true
 }
 
 teardown() {
   # Clean up test sessions
   tmux list-sessions -F '#{session_name}' 2>/dev/null | \
-    grep -E "^${TEST_SESSION_BASE} #" | \
+    grep -E "^(${TEST_SESSION_BASE}|test-project) #|^unrelated-session$" | \
     xargs -I {} tmux kill-session -t "{}" 2>/dev/null || true
 
   # Clean up temp directory
@@ -54,7 +54,7 @@ build_spawn_script() {
       pkgs = import <nixpkgs> {};
       lib = pkgs.lib;
       config = $config_expr;
-      tmuxModule = import ./lib/tmux/default.nix { inherit lib pkgs config; };
+      tmuxModule = import $PROJECT_ROOT/lib/tmux/default.nix { inherit lib pkgs config; };
     in tmuxModule.spawnScript
   " 2>/dev/null
 }
@@ -119,7 +119,7 @@ build_spawn_script() {
       pkgs = import <nixpkgs> {};
       lib = pkgs.lib;
       config = { panes = [{ command = \"\$SHELL\"; }]; };
-      tmuxModule = import ./lib/tmux/default.nix { inherit lib pkgs config; };
+      tmuxModule = import $PROJECT_ROOT/lib/tmux/default.nix { inherit lib pkgs config; };
     in tmuxModule.spawnScript
   " 2>/dev/null)
   skip_if_no_script "$spawn_script"
@@ -162,7 +162,7 @@ build_tmux_scripts() {
       pkgs = import <nixpkgs> {};
       lib = pkgs.lib;
       config = $config_expr;
-      tmuxModule = import ./lib/tmux/default.nix { inherit lib pkgs config; };
+      tmuxModule = import $PROJECT_ROOT/lib/tmux/default.nix { inherit lib pkgs config; };
     in pkgs.symlinkJoin {
       name = \"tmux-scripts\";
       paths = [
@@ -182,6 +182,7 @@ build_tmux_scripts() {
   cd "$TEST_PROJECT_DIR"
 
   # Create unrelated tmux session
+  tmux kill-session -t "unrelated-session" 2>/dev/null || true
   tmux new-session -d -s "unrelated-session"
 
   # Create sandbox session
@@ -191,6 +192,7 @@ build_tmux_scripts() {
 
   # Verify sandbox-sessions lists only sandbox session
   run "$scripts/bin/sandbox-sessions"
+  echo "DEBUG output: $output" >&2
   [[ "$output" =~ "$TEST_SESSION_BASE #1" ]]
   [[ ! "$output" =~ "unrelated-session" ]]
 

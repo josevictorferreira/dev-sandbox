@@ -33,20 +33,24 @@ let
       delay = pane.delay or 0;
       cmd = pane.command or "$SHELL";
       delayCmd = if delay > 0 then "sleep ${toString delay} && " else "";
-      paneTarget = "$SESSION_NAME:0.${toString i}";
       # Build the command to send - use double quotes and escape properly
       paneCmd = ''${delayCmd}${cmd}'';
     in
     if i == 0 then
     # First pane: send command to existing window
       ''
-        ${pkgs.tmux}/bin/tmux send-keys -t "${paneTarget}" "cd \"$PROJECT_DIR/${subpath}\" && nix develop --command \$SHELL -c '${paneCmd}'" Enter
+        WINDOW_INDEX=$(${pkgs.tmux}/bin/tmux list-windows -t "$SESSION_NAME" -F '#{window_index}' | head -n 1)
+        PANE_INDEX=$(${pkgs.tmux}/bin/tmux list-panes -t "$SESSION_NAME:$WINDOW_INDEX" -F '#{pane_index}' | head -n 1)
+        ${pkgs.tmux}/bin/tmux send-keys -t "$SESSION_NAME:$WINDOW_INDEX.$PANE_INDEX" "cd \"$PROJECT_DIR/${subpath}\" && nix develop --command \$SHELL -c '${paneCmd}'" Enter
       ''
     else
     # Additional panes: split first, then send command
       ''
         ${pkgs.tmux}/bin/tmux split-window -t "$SESSION_NAME"
-        ${pkgs.tmux}/bin/tmux send-keys -t "${paneTarget}" "cd \"$PROJECT_DIR/${subpath}\" && nix develop --command \$SHELL -c '${paneCmd}'" Enter
+        # The new pane is always the last one in the current window
+        WINDOW_INDEX=$(${pkgs.tmux}/bin/tmux list-windows -t "$SESSION_NAME" -F '#{window_index}' | head -n 1)
+        PANE_INDEX=$(${pkgs.tmux}/bin/tmux list-panes -t "$SESSION_NAME:$WINDOW_INDEX" -F '#{pane_index}' | tail -n 1)
+        ${pkgs.tmux}/bin/tmux send-keys -t "$SESSION_NAME:$WINDOW_INDEX.$PANE_INDEX" "cd \"$PROJECT_DIR/${subpath}\" && nix develop --command \$SHELL -c '${paneCmd}'" Enter
       '';
 
   paneCommands = lib.imap0 mkPaneCommand panes;
@@ -87,8 +91,22 @@ in
     echo "Creating session: $SESSION_NAME"
 
     # Create session (detached initially)
-    ${pkgs.tmux}/bin/tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_DIR/${subpath}"
+    # We use -P to print session information, ensuring it's actually created
+    ${pkgs.tmux}/bin/tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_DIR/${subpath}" -P || { echo "Failed to create tmux session"; exit 1; }
+    
+    # Wait for session and window to be available
+    COUNT=0
+    while ! ${pkgs.tmux}/bin/tmux has-session -t "$SESSION_NAME" 2>/dev/null; do
+      sleep 0.2
+      COUNT=$((COUNT + 1))
+      [ $COUNT -gt 50 ] && { 
+        echo "Failed to initialize tmux session '$SESSION_NAME' (timeout)"
+        ${pkgs.tmux}/bin/tmux list-sessions || echo "No tmux sessions exist"
+        exit 1 
+      }
+    done
 
+    echo "Session initialized, creating panes..."
     # Create panes and run commands
     ${lib.concatStringsSep "\n" paneCommands}
 
@@ -96,10 +114,13 @@ in
     ${pkgs.tmux}/bin/tmux select-layout -t "$SESSION_NAME" ${layout}
 
     # Attach or switch based on whether we're already in tmux
-    if [ -n "''${TMUX:-}" ]; then
-      ${pkgs.tmux}/bin/tmux switch-client -t "$SESSION_NAME"
-    else
-      ${pkgs.tmux}/bin/tmux attach-session -t "$SESSION_NAME"
+    # Only if stdin is a terminal
+    if [ -t 0 ]; then
+      if [ -n "''${TMUX:-}" ]; then
+        ${pkgs.tmux}/bin/tmux switch-client -t "$SESSION_NAME"
+      else
+        ${pkgs.tmux}/bin/tmux attach-session -t "$SESSION_NAME"
+      fi
     fi
   '';
 
@@ -141,7 +162,8 @@ in
 
     ${sessionNameScript}
 
-    PATTERN="^$SESSION_BASE #"
+    # Match the pattern within the formatted output (which has leading spaces)
+    PATTERN="^[[:space:]]*$SESSION_BASE #"
 
     echo "Active Sandbox Sessions ($SESSION_BASE):"
     echo ""
